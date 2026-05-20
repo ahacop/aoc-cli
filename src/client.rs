@@ -77,6 +77,26 @@ pub fn next_unsolved(html: &str) -> Option<(u32, u8)> {
     None
 }
 
+/// Stars earned on each released day of the calendar page, in day order.
+/// Stops at the first unreleased day, so `len()` is the count of released days.
+pub fn star_summary(html: &str) -> Vec<u8> {
+    let mut stars = Vec::with_capacity(25);
+    for day in 1..=25u32 {
+        let Some(label) = find_day_label(html, day) else {
+            break;
+        };
+        let count = if label.contains("two stars") {
+            2
+        } else if label.contains("one star") {
+            1
+        } else {
+            0
+        };
+        stars.push(count);
+    }
+    stars
+}
+
 fn find_day_label(html: &str, day: u32) -> Option<&str> {
     let prefix = format!("aria-label=\"Day {day}");
     let mut search_pos = 0;
@@ -220,6 +240,34 @@ mod tests {
             <a aria-label="Day 1"></a>
         "#;
         assert_eq!(next_unsolved(html), Some((1, 1)));
+    }
+
+    #[test]
+    fn star_summary_counts_stars_per_day() {
+        let html = r#"
+            <a aria-label="Day 1, two stars"></a>
+            <a aria-label="Day 2, one star"></a>
+            <a aria-label="Day 3"></a>
+        "#;
+        assert_eq!(star_summary(html), vec![2, 1, 0]);
+    }
+
+    #[test]
+    fn star_summary_stops_at_unreleased_days() {
+        let html = r#"
+            <a aria-label="Day 1, two stars"></a>
+            <a aria-label="Day 2, one star"></a>
+        "#;
+        assert_eq!(star_summary(html), vec![2, 1]);
+    }
+
+    #[test]
+    fn star_summary_disambiguates_day_one_from_day_ten() {
+        let html = r#"
+            <a aria-label="Day 10, two stars"></a>
+            <a aria-label="Day 1, one star"></a>
+        "#;
+        assert_eq!(star_summary(html), vec![1]);
     }
 
     #[test]

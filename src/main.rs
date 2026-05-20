@@ -44,6 +44,8 @@ enum Command {
     /// Print the next day and part to tackle for YEAR (lowest day not yet two-starred).
     /// Output format: `<day> <part>` on stdout.
     Next { year: u32 },
+    /// Print stars earned per day for YEAR plus the total.
+    Stars { year: u32 },
 }
 
 fn main() -> Result<()> {
@@ -116,6 +118,28 @@ fn main() -> Result<()> {
                 }
                 None => bail!("no puzzles left for {year} — all released days are two-starred"),
             }
+        }
+        Command::Stars { year } => {
+            ensure!(year >= 2015, "year must be >= 2015");
+            let token = session::load()?;
+            let html = client::fetch_calendar(year, &token)?;
+            let stars = client::star_summary(&html);
+            if stars.is_empty() {
+                bail!("no released days yet for {year}");
+            }
+            for (i, &s) in stars.iter().enumerate() {
+                let day = i as u32 + 1;
+                let marks = match s {
+                    2 => "**",
+                    1 => "*",
+                    _ => "",
+                };
+                println!("Day {day:>2}: {marks}");
+            }
+            let total: u32 = stars.iter().map(|&s| u32::from(s)).sum();
+            let possible = stars.len() as u32 * 2;
+            println!("Total: {total}/{possible} stars");
+            Ok(())
         }
     }
 }
