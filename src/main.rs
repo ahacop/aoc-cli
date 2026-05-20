@@ -46,6 +46,8 @@ enum Command {
     Next { year: u32 },
     /// Print stars earned per day for YEAR plus the total.
     Stars { year: u32 },
+    /// Open the puzzle page for YEAR/DAY in your browser.
+    Open { year: u32, day: u32 },
 }
 
 fn main() -> Result<()> {
@@ -118,6 +120,12 @@ fn main() -> Result<()> {
                 }
                 None => bail!("no puzzles left for {year} — all released days are two-starred"),
             }
+        }
+        Command::Open { year, day } => {
+            validate(year, day)?;
+            let url = format!("https://adventofcode.com/{year}/day/{day}");
+            webbrowser::open(&url).with_context(|| format!("opening {url}"))?;
+            Ok(())
         }
         Command::Stars { year } => {
             ensure!(year >= 2015, "year must be >= 2015");
