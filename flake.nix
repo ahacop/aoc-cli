@@ -43,11 +43,12 @@
             cargo = rust;
             rustc = rust;
           };
+          cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         in
         {
           default = rustPlatform.buildRustPackage {
             pname = "aoc-cli";
-            version = "0.1.0";
+            version = cargoToml.package.version;
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
 
