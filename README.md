@@ -10,6 +10,36 @@ A small CLI for fetching [Advent of Code](https://adventofcode.com) puzzles and 
 brew install ahacop/tap/aoc-cli
 ```
 
+### Nix flake
+
+For one-off use:
+
+```sh
+nix run github:ahacop/aoc-cli -- puzzle 2023 1
+```
+
+To pull it into a NixOS / home-manager config that's itself a flake, add it as an input:
+
+```nix
+# flake.nix
+inputs.aoc-cli = {
+  url = "github:ahacop/aoc-cli";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+…and reference the package wherever you list packages:
+
+```nix
+environment.systemPackages = [
+  inputs.aoc-cli.packages.${pkgs.stdenv.hostPlatform.system}.default
+];
+# or, in home-manager:
+home.packages = [
+  inputs.aoc-cli.packages.${pkgs.stdenv.hostPlatform.system}.default
+];
+```
+
 ### From source
 
 ```sh
