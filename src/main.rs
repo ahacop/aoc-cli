@@ -2,9 +2,9 @@ mod auth;
 mod client;
 mod session;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 
 #[derive(Parser)]
 #[command(name = "aoc", version, about = "Advent of Code CLI")]
@@ -27,6 +27,13 @@ enum Command {
     Puzzle { year: u32, day: u32 },
     /// Fetch the puzzle input for a given day.
     Input { year: u32, day: u32 },
+    /// Submit an answer for a given day and part. If ANSWER is omitted, it is read from stdin.
+    Submit {
+        year: u32,
+        day: u32,
+        part: u8,
+        answer: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -49,6 +56,31 @@ fn main() -> Result<()> {
             let token = session::load()?;
             let body = client::fetch_input(year, day, &token)?;
             io::stdout().write_all(body.as_bytes())?;
+            Ok(())
+        }
+        Command::Submit {
+            year,
+            day,
+            part,
+            answer,
+        } => {
+            validate(year, day)?;
+            ensure!(part == 1 || part == 2, "part must be 1 or 2");
+            let raw = match answer {
+                Some(a) => a,
+                None => {
+                    let mut buf = String::new();
+                    io::stdin()
+                        .read_to_string(&mut buf)
+                        .context("reading answer from stdin")?;
+                    buf
+                }
+            };
+            let answer = raw.trim();
+            ensure!(!answer.is_empty(), "empty answer");
+            let token = session::load()?;
+            let html = client::submit_answer(year, day, part, answer, &token)?;
+            io::stdout().write_all(client::render_response(&html).as_bytes())?;
             Ok(())
         }
     }
