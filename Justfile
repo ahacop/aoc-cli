@@ -6,6 +6,10 @@ check:
     cargo fmt --check
     cargo clippy --all-targets -- -D warnings
 
+# Build and run the CLI from current source, e.g. `just run puzzle 2023 1`.
+run *ARGS:
+    cargo run --release -- {{ARGS}}
+
 # Re-run `cargo check` (or any other cargo subcommand) on file change.
 watch cmd='check':
     cargo watch -x {{cmd}}
