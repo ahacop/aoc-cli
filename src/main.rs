@@ -1,9 +1,10 @@
+mod auth;
 mod client;
 mod session;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use clap::{Parser, Subcommand};
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, Write};
 
 #[derive(Parser)]
 #[command(name = "aoc", version, about = "Advent of Code CLI")]
@@ -16,9 +17,9 @@ struct Cli {
 enum Command {
     /// Store your Advent of Code session cookie.
     ///
-    /// Find it in your browser after logging in to https://adventofcode.com
-    /// (DevTools -> Application -> Cookies -> `session`). If TOKEN is omitted,
-    /// the cookie is read from stdin.
+    /// With no TOKEN, tries to read the `session` cookie from a local browser
+    /// (Chrome, Firefox, Safari, Edge, Brave). If that fails, opens the AoC
+    /// login page and prompts you to paste it.
     Login { token: Option<String> },
     /// Print the path of the saved session file.
     Where,
@@ -62,17 +63,7 @@ fn validate(year: u32, day: u32) -> Result<()> {
 fn login(token: Option<String>) -> Result<()> {
     let raw = match token {
         Some(t) => t,
-        None => {
-            if io::stdin().is_terminal() {
-                eprint!("Paste your AoC session cookie: ");
-                io::stderr().flush().ok();
-            }
-            let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .context("reading token from stdin")?;
-            buf
-        }
+        None => auth::obtain_token()?,
     };
     let token = raw.trim();
     ensure!(!token.is_empty(), "empty session token");
