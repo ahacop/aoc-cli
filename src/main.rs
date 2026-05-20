@@ -1,4 +1,5 @@
 mod auth;
+mod cache;
 mod client;
 mod session;
 
@@ -25,8 +26,14 @@ enum Command {
     Where,
     /// Fetch the puzzle description for a given day.
     Puzzle { year: u32, day: u32 },
-    /// Fetch the puzzle input for a given day.
-    Input { year: u32, day: u32 },
+    /// Fetch the puzzle input for a given day. Cached on disk after the first fetch.
+    Input {
+        year: u32,
+        day: u32,
+        /// Bypass and overwrite the local cache.
+        #[arg(long)]
+        refresh: bool,
+    },
     /// Submit an answer for a given day and part. If ANSWER is omitted, it is read from stdin.
     Submit {
         year: u32,
@@ -54,10 +61,22 @@ fn main() -> Result<()> {
             io::stdout().write_all(client::render_puzzle(&html).as_bytes())?;
             Ok(())
         }
-        Command::Input { year, day } => {
+        Command::Input { year, day, refresh } => {
             validate(year, day)?;
-            let token = session::load()?;
-            let body = client::fetch_input(year, day, &token)?;
+            let cached = if refresh {
+                None
+            } else {
+                cache::read_input(year, day)?
+            };
+            let body = match cached {
+                Some(b) => b,
+                None => {
+                    let token = session::load()?;
+                    let body = client::fetch_input(year, day, &token)?;
+                    cache::write_input(year, day, &body)?;
+                    body
+                }
+            };
             io::stdout().write_all(body.as_bytes())?;
             Ok(())
         }
