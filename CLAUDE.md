@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`aoc-cli` is a small Rust CLI (binary name `aoc`) for fetching Advent of Code puzzles and inputs, and submitting answers.
+`aoc-cli` is a small Rust CLI (binary name `aoc`) for fetching Advent of Code puzzles and inputs, submitting answers, and tracking progress.
 
 ## Commands
 
@@ -18,12 +18,13 @@ The dev shell (entered automatically via `direnv` / `flake.nix`) provides the Ru
 
 ## Architecture
 
-Four modules, each with a narrow responsibility:
+Five modules, each with a narrow responsibility:
 
-- `src/main.rs` — `clap` subcommand dispatch (`Login`, `Where`, `Puzzle`, `Input`, `Submit`, `Next`) and input validation (`year >= 2015`, `day ∈ 1..=25`, `part ∈ {1, 2}`). `submit` reads the answer from stdin when the positional arg is omitted, so solver output can be piped in.
+- `src/main.rs` — `clap` subcommand dispatch (`Login`, `Where`, `Puzzle`, `Input`, `Submit`, `Next`, `Stars`, `Open`) and input validation (`year >= 2015`, `day ∈ 1..=25`, `part ∈ {1, 2}`). `submit` reads the answer from stdin when the positional arg is omitted, so solver output can be piped in. `input` reads from the on-disk cache when present; `--refresh` forces a re-fetch and overwrites the cached copy. `open` shells out via the `webbrowser` crate.
 - `src/auth.rs` — token acquisition. `aoc login` (no arg) first tries to read the `session` cookie from local browsers via `rookie`, augmented with extra Firefox cookie DB paths under `~/.config/{mozilla/firefox,librewolf,zen}/<profile>/cookies.sqlite` (NixOS / Home Manager layout that `rookie` misses by default). Picks the cookie with the latest expiry. Falls back to opening the AoC login page in a browser and reading a pasted token from stdin.
-- `src/session.rs` — persistence. Token is stored at the platform config dir (`directories::ProjectDirs` with qualifier `""`, organization `""`, app `aoc-cli`) as a file named `session`, chmod 0600 on Unix.
-- `src/client.rs` — `reqwest` blocking client with `redirect::Policy::none()` so that AoC's "redirect to login" responses surface as `302 FOUND` and are mapped to a clear auth-failure error (alongside `401`). Sends the session cookie as a `Cookie` header. `render_puzzle` extracts `<article class="day-desc">...</article>` blocks (there are two once part 2 is unlocked) and renders each via `html2text` at width 100; if no articles are found it falls back to rendering the whole page. `submit_answer` POSTs `level=<part>&answer=<value>` to `/{year}/day/{day}/answer`, and `render_response` extracts the first `<article>...</article>` (no `day-desc` class) from the feedback page. `next_unsolved` parses the calendar page's `aria-label="Day N, one star|two stars"` markers to find the lowest day still owing stars.
+- `src/session.rs` — auth-token persistence. Token is stored at the platform config dir (`directories::ProjectDirs` with qualifier `""`, organization `""`, app `aoc-cli`) as a file named `session`, chmod 0600 on Unix.
+- `src/cache.rs` — puzzle-input persistence. Inputs are stored under the platform cache dir at `inputs/<year>/<day>.txt` (zero-padded day). `read_input` returns `Ok(None)` on `NotFound` and bubbles up any other I/O error; `write_input` creates the parent dirs and writes the body. Per AoC's automation guidelines, inputs are stable per user — they're cached indefinitely and only re-fetched on `--refresh`.
+- `src/client.rs` — `reqwest` blocking client with `redirect::Policy::none()` so that AoC's "redirect to login" responses surface as `302 FOUND` and are mapped to a clear auth-failure error (alongside `401`). Sends the session cookie as a `Cookie` header. `render_puzzle` extracts `<article class="day-desc">...</article>` blocks (there are two once part 2 is unlocked) and renders each via `html2text` at width 100; if no articles are found it falls back to rendering the whole page. `submit_answer` POSTs `level=<part>&answer=<value>` to `/{year}/day/{day}/answer`, and `render_response` extracts the first `<article>...</article>` (no `day-desc` class) from the feedback page. `next_unsolved` and `star_summary` both parse the calendar page's `aria-label="Day N[, one star|two stars]"` markers — the former finds the lowest day still owing stars, the latter returns a per-day star count vec covering only released days.
 
 ## Conventions
 

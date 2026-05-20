@@ -56,13 +56,18 @@ Pre-built binaries for `aarch64-apple-darwin`, `aarch64-unknown-linux-gnu`, and 
 aoc login                 # acquire and store an AoC session cookie
 aoc where                 # print where the session file lives
 aoc puzzle 2023 1         # render the puzzle text for day 1 of 2023
-aoc input  2023 1         # download the puzzle input
+aoc input  2023 1         # download the puzzle input (cached on disk thereafter)
+aoc input  2023 1 --refresh   # bypass and overwrite the local cache
 aoc submit 2023 1 1 12345 # submit `12345` as the answer to part 1
 my-solver | aoc submit 2023 1 1   # or pipe the answer from stdin
 aoc next   2023           # print "<day> <part>" for the lowest day not yet 2-starred
+aoc stars  2023           # show stars earned per day, plus the total
+aoc open   2023 1         # open the puzzle page in your browser
 ```
 
 `aoc login` with no argument first tries to read the `session` cookie out of local browsers (Firefox, LibreWolf, Zen, plus whatever `rookie` supports). If that fails it opens the AoC login page so you can paste a token from `document.cookie`.
+
+Inputs are cached under your platform cache dir (`~/.cache/aoc-cli/inputs/<year>/<day>.txt` on Linux). Per AoC's automation guidelines they're stable per user, so the file is kept indefinitely — pass `--refresh`, or just delete it, to re-fetch.
 
 Status messages go to stderr; puzzle text and input go to stdout, so:
 
