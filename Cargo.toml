@@ -5,6 +5,7 @@ edition = "2024"
 description = "Advent of Code CLI"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/ahacop/aoc-cli"
+homepage = "https://github.com/ahacop/aoc-cli"
 
 [[bin]]
 name = "aoc"
@@ -22,3 +23,8 @@ webbrowser = "1.2.1"
 [profile.release]
 lto = "thin"
 strip = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
