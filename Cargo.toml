@@ -1,0 +1,22 @@
+[package]
+name = "aoc-cli"
+version = "0.1.0"
+edition = "2024"
+description = "Advent of Code CLI"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/ahacop/aoc-cli"
+
+[[bin]]
+name = "aoc"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+directories = "5"
+html2text = "0.12"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "gzip"] }
+
+[profile.release]
+lto = "thin"
+strip = true
