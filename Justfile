@@ -19,5 +19,5 @@ release version:
     @git diff --quiet && git diff --cached --quiet || { echo "error: uncommitted changes"; exit 1; }
     cargo set-version {{version}}
     git commit -am "Release v{{version}}"
-    git tag v{{version}}
+    git tag -a v{{version}} -m "v{{version}}"
     git push --follow-tags
