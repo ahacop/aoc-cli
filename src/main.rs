@@ -35,6 +35,10 @@ enum Command {
         refresh: bool,
     },
     /// Submit an answer for a given day and part. If ANSWER is omitted, it is read from stdin.
+    ///
+    /// If the part is already solved, the answer is verified locally against the
+    /// one recorded on the puzzle page instead of being POSTed — so you can
+    /// double-check solver output even after the part is done.
     Submit {
         year: u32,
         day: u32,
@@ -105,6 +109,19 @@ fn main() -> Result<()> {
             let answer = raw.trim();
             ensure!(!answer.is_empty(), "empty answer");
             let token = session::load()?;
+            let puzzle = client::fetch_puzzle(year, day, &token)?;
+            if let Some(known) = client::known_answer(&puzzle, part) {
+                if known == answer {
+                    eprintln!(
+                        "verified against previously-submitted answer for {year} day {day} part {part}"
+                    );
+                    println!("That's the right answer!");
+                    return Ok(());
+                }
+                bail!(
+                    "answer mismatch for {year} day {day} part {part}\n  submitted: {answer}\n  recorded:  {known}"
+                );
+            }
             let html = client::submit_answer(year, day, part, answer, &token)?;
             io::stdout().write_all(client::render_response(&html).as_bytes())?;
             Ok(())

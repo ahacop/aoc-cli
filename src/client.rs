@@ -115,6 +115,25 @@ fn find_day_label(html: &str, day: u32) -> Option<&str> {
     }
 }
 
+/// Once a part is solved, AoC embeds the answer in the puzzle page as
+/// `<p>Your puzzle answer was <code>X</code>.</p>`. The Nth occurrence
+/// corresponds to part N. Returns `None` if `part` is not yet solved.
+pub fn known_answer(html: &str, part: u8) -> Option<String> {
+    let needle = "Your puzzle answer was <code>";
+    let mut rest = html;
+    let mut seen = 0u8;
+    loop {
+        let idx = rest.find(needle)?;
+        let after = &rest[idx + needle.len()..];
+        let close = after.find("</code>")?;
+        seen += 1;
+        if seen == part {
+            return Some(after[..close].to_string());
+        }
+        rest = &after[close..];
+    }
+}
+
 pub fn submit_answer(year: u32, day: u32, part: u8, answer: &str, token: &str) -> Result<String> {
     let url = format!("https://adventofcode.com/{year}/day/{day}/answer");
     let level = part.to_string();
@@ -268,6 +287,30 @@ mod tests {
             <a aria-label="Day 1, one star"></a>
         "#;
         assert_eq!(star_summary(html), vec![1]);
+    }
+
+    #[test]
+    fn known_answer_returns_part_1() {
+        let html = r#"<article class="day-desc">part 1</article>
+            <p>Your puzzle answer was <code>123</code>.</p>"#;
+        assert_eq!(known_answer(html, 1).as_deref(), Some("123"));
+        assert_eq!(known_answer(html, 2), None);
+    }
+
+    #[test]
+    fn known_answer_returns_both_parts() {
+        let html = r#"<article class="day-desc">part 1</article>
+            <p>Your puzzle answer was <code>aaa</code>.</p>
+            <article class="day-desc">part 2</article>
+            <p>Your puzzle answer was <code>bbb</code>.</p>"#;
+        assert_eq!(known_answer(html, 1).as_deref(), Some("aaa"));
+        assert_eq!(known_answer(html, 2).as_deref(), Some("bbb"));
+    }
+
+    #[test]
+    fn known_answer_none_when_unsolved() {
+        let html = r#"<article class="day-desc">part 1 with no answer yet</article>"#;
+        assert_eq!(known_answer(html, 1), None);
     }
 
     #[test]
