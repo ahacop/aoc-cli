@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`aoc-cli` is a small Rust CLI (binary name `aoc`) for fetching Advent of Code puzzles and inputs. Edition 2024.
+`aoc-cli` is a small Rust CLI (binary name `aoc`) for fetching Advent of Code puzzles and inputs, and submitting answers.
 
 ## Commands
 
@@ -20,10 +20,10 @@ The dev shell (entered automatically via `direnv` / `flake.nix`) provides the Ru
 
 Four modules, each with a narrow responsibility:
 
-- `src/main.rs` — `clap` subcommand dispatch (`Login`, `Where`, `Puzzle`, `Input`) and input validation (`year >= 2015`, `day ∈ 1..=25`).
+- `src/main.rs` — `clap` subcommand dispatch (`Login`, `Where`, `Puzzle`, `Input`, `Submit`) and input validation (`year >= 2015`, `day ∈ 1..=25`, `part ∈ {1, 2}`). `submit` reads the answer from stdin when the positional arg is omitted, so solver output can be piped in.
 - `src/auth.rs` — token acquisition. `aoc login` (no arg) first tries to read the `session` cookie from local browsers via `rookie`, augmented with extra Firefox cookie DB paths under `~/.config/{mozilla/firefox,librewolf,zen}/<profile>/cookies.sqlite` (NixOS / Home Manager layout that `rookie` misses by default). Picks the cookie with the latest expiry. Falls back to opening the AoC login page in a browser and reading a pasted token from stdin.
 - `src/session.rs` — persistence. Token is stored at the platform config dir (`directories::ProjectDirs` with qualifier `""`, organization `""`, app `aoc-cli`) as a file named `session`, chmod 0600 on Unix.
-- `src/client.rs` — `reqwest` blocking client with `redirect::Policy::none()` so that AoC's "redirect to login" responses surface as `302 FOUND` and are mapped to a clear auth-failure error (alongside `401`). Sends the session cookie as a `Cookie` header. `render_puzzle` extracts `<article class="day-desc">...</article>` blocks (there are two once part 2 is unlocked) and renders each via `html2text` at width 100; if no articles are found it falls back to rendering the whole page.
+- `src/client.rs` — `reqwest` blocking client with `redirect::Policy::none()` so that AoC's "redirect to login" responses surface as `302 FOUND` and are mapped to a clear auth-failure error (alongside `401`). Sends the session cookie as a `Cookie` header. `render_puzzle` extracts `<article class="day-desc">...</article>` blocks (there are two once part 2 is unlocked) and renders each via `html2text` at width 100; if no articles are found it falls back to rendering the whole page. `submit_answer` POSTs `level=<part>&answer=<value>` to `/{year}/day/{day}/answer`, and `render_response` extracts the first `<article>...</article>` (no `day-desc` class) from the feedback page.
 
 ## Conventions
 
