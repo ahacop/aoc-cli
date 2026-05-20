@@ -38,13 +38,18 @@ enum Command {
     ///
     /// If the part is already solved, the answer is verified locally against the
     /// one recorded on the puzzle page instead of being POSTed — so you can
-    /// double-check solver output even after the part is done.
+    /// double-check solver output even after the part is done. The recorded
+    /// answer is never shown on mismatch, so submit stays spoiler-free while
+    /// you're solving; use `aoc answer` to reveal it.
     Submit {
         year: u32,
         day: u32,
         part: u8,
         answer: Option<String>,
     },
+    /// Print the recorded answer for an already-solved day and part. Bails if
+    /// the part isn't solved yet, so it never spoils a puzzle you haven't done.
+    Answer { year: u32, day: u32, part: u8 },
     /// Print the next day and part to tackle for YEAR (lowest day not yet two-starred).
     /// Output format: `<day> <part>` on stdout.
     Next { year: u32 },
@@ -112,19 +117,27 @@ fn main() -> Result<()> {
             let puzzle = client::fetch_puzzle(year, day, &token)?;
             if let Some(known) = client::known_answer(&puzzle, part) {
                 if known == answer {
-                    eprintln!(
-                        "verified against previously-submitted answer for {year} day {day} part {part}"
-                    );
-                    println!("That's the right answer!");
+                    println!("ok  {year} day {day} part {part}");
                     return Ok(());
                 }
-                bail!(
-                    "answer mismatch for {year} day {day} part {part}\n  submitted: {answer}\n  recorded:  {known}"
-                );
+                bail!("mismatch  {year} day {day} part {part}");
             }
             let html = client::submit_answer(year, day, part, answer, &token)?;
             io::stdout().write_all(client::render_response(&html).as_bytes())?;
             Ok(())
+        }
+        Command::Answer { year, day, part } => {
+            validate(year, day)?;
+            ensure!(part == 1 || part == 2, "part must be 1 or 2");
+            let token = session::load()?;
+            let puzzle = client::fetch_puzzle(year, day, &token)?;
+            match client::known_answer(&puzzle, part) {
+                Some(a) => {
+                    println!("{a}");
+                    Ok(())
+                }
+                None => bail!("{year} day {day} part {part} is not solved yet"),
+            }
         }
         Command::Next { year } => {
             ensure!(year >= 2015, "year must be >= 2015");
