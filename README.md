@@ -59,6 +59,7 @@ aoc puzzle 2023 1         # render the puzzle text for day 1 of 2023
 aoc input  2023 1         # download the puzzle input
 aoc submit 2023 1 1 12345 # submit `12345` as the answer to part 1
 my-solver | aoc submit 2023 1 1   # or pipe the answer from stdin
+aoc next   2023           # print "<day> <part>" for the lowest day not yet 2-starred
 ```
 
 `aoc login` with no argument first tries to read the `session` cookie out of local browsers (Firefox, LibreWolf, Zen, plus whatever `rookie` supports). If that fails it opens the AoC login page so you can paste a token from `document.cookie`.

@@ -58,6 +58,43 @@ pub fn fetch_input(year: u32, day: u32, token: &str) -> Result<String> {
     )
 }
 
+pub fn fetch_calendar(year: u32, token: &str) -> Result<String> {
+    get(&format!("https://adventofcode.com/{year}"), token)
+}
+
+/// Lowest day on the calendar page that still needs work, paired with the next
+/// part to tackle (2 if part 1 is done, otherwise 1). `None` once every released
+/// day has both stars, or before any day has been released.
+pub fn next_unsolved(html: &str) -> Option<(u32, u8)> {
+    for day in 1..=25u32 {
+        let label = find_day_label(html, day)?;
+        if label.contains("two stars") {
+            continue;
+        }
+        let part = if label.contains("one star") { 2 } else { 1 };
+        return Some((day, part));
+    }
+    None
+}
+
+fn find_day_label(html: &str, day: u32) -> Option<&str> {
+    let prefix = format!("aria-label=\"Day {day}");
+    let mut search_pos = 0;
+    loop {
+        let rel = html[search_pos..].find(&prefix)?;
+        let abs = search_pos + rel;
+        let after = &html[abs + prefix.len()..];
+        // Disambiguate "Day 1" from "Day 10".."Day 19": the next char must end the number.
+        match after.as_bytes().first() {
+            Some(b'"') | Some(b',') => {
+                let close = after.find('"')?;
+                return Some(&after[..close]);
+            }
+            _ => search_pos = abs + prefix.len(),
+        }
+    }
+}
+
 pub fn submit_answer(year: u32, day: u32, part: u8, answer: &str, token: &str) -> Result<String> {
     let url = format!("https://adventofcode.com/{year}/day/{day}/answer");
     let level = part.to_string();
@@ -142,5 +179,57 @@ mod tests {
     #[test]
     fn extract_first_article_none_when_missing() {
         assert!(extract_first_article("<p>no articles here</p>").is_none());
+    }
+
+    #[test]
+    fn next_unsolved_skips_two_star_days() {
+        let html = r#"
+            <a aria-label="Day 1, two stars" class="calendar-day1 calendar-verycomplete"></a>
+            <a aria-label="Day 2, one star" class="calendar-day2 calendar-complete"></a>
+            <a aria-label="Day 3" class="calendar-day3"></a>
+        "#;
+        assert_eq!(next_unsolved(html), Some((2, 2)));
+    }
+
+    #[test]
+    fn next_unsolved_returns_first_fresh_day() {
+        let html = r#"
+            <a aria-label="Day 1, two stars"></a>
+            <a aria-label="Day 2, two stars"></a>
+            <a aria-label="Day 3"></a>
+            <a aria-label="Day 4, one star"></a>
+        "#;
+        assert_eq!(next_unsolved(html), Some((3, 1)));
+    }
+
+    #[test]
+    fn next_unsolved_none_when_all_two_stars() {
+        let mut html = String::new();
+        for d in 1..=25 {
+            html.push_str(&format!(r#"<a aria-label="Day {d}, two stars"></a>"#));
+        }
+        assert_eq!(next_unsolved(&html), None);
+    }
+
+    #[test]
+    fn next_unsolved_disambiguates_day_one_from_day_ten() {
+        // Day 10 appears before Day 1 in the source — naive substring search would
+        // pick "Day 10" when looking for "Day 1".
+        let html = r#"
+            <a aria-label="Day 10, two stars"></a>
+            <a aria-label="Day 1"></a>
+        "#;
+        assert_eq!(next_unsolved(html), Some((1, 1)));
+    }
+
+    #[test]
+    fn next_unsolved_stops_at_unreleased_day() {
+        // Only days 1..=3 exist on the calendar (active year mid-December).
+        let html = r#"
+            <a aria-label="Day 1, two stars"></a>
+            <a aria-label="Day 2, two stars"></a>
+            <a aria-label="Day 3, two stars"></a>
+        "#;
+        assert_eq!(next_unsolved(html), None);
     }
 }

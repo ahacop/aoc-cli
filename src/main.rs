@@ -2,7 +2,7 @@ mod auth;
 mod client;
 mod session;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use clap::{Parser, Subcommand};
 use std::io::{self, Read, Write};
 
@@ -34,6 +34,9 @@ enum Command {
         part: u8,
         answer: Option<String>,
     },
+    /// Print the next day and part to tackle for YEAR (lowest day not yet two-starred).
+    /// Output format: `<day> <part>` on stdout.
+    Next { year: u32 },
 }
 
 fn main() -> Result<()> {
@@ -82,6 +85,18 @@ fn main() -> Result<()> {
             let html = client::submit_answer(year, day, part, answer, &token)?;
             io::stdout().write_all(client::render_response(&html).as_bytes())?;
             Ok(())
+        }
+        Command::Next { year } => {
+            ensure!(year >= 2015, "year must be >= 2015");
+            let token = session::load()?;
+            let html = client::fetch_calendar(year, &token)?;
+            match client::next_unsolved(&html) {
+                Some((day, part)) => {
+                    println!("{day} {part}");
+                    Ok(())
+                }
+                None => bail!("no puzzles left for {year} — all released days are two-starred"),
+            }
         }
     }
 }
