@@ -54,6 +54,7 @@
             packages = [
               rust
               pkgs.cargo-watch
+              pkgs.cargo-dist
               pkgs.cargo-edit
               pkgs.just
             ];
