@@ -54,7 +54,7 @@
             meta = {
               description = "Advent of Code CLI";
               homepage = "https://github.com/ahacop/aoc-cli";
-              license = pkgs.lib.licenses.mit;
+              license = pkgs.lib.licenses.gpl3Plus;
               mainProgram = "aoc";
             };
           };
