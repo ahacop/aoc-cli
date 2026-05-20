@@ -52,6 +52,9 @@
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
 
+            # rookie's build.rs shells out to `git rev-parse` for COMMIT_HASH.
+            nativeBuildInputs = [ pkgs.git ];
+
             meta = {
               description = "Advent of Code CLI";
               homepage = "https://github.com/ahacop/aoc-cli";
