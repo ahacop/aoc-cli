@@ -9,17 +9,34 @@
     };
   };
 
-  outputs = { self, nixpkgs, rust-overlay }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+    }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system:
-        f (import nixpkgs {
-          inherit system;
-          overlays = [ rust-overlay.overlays.default ];
-        }));
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+      forAllSystems =
+        f:
+        nixpkgs.lib.genAttrs systems (
+          system:
+          f (
+            import nixpkgs {
+              inherit system;
+              overlays = [ rust-overlay.overlays.default ];
+            }
+          )
+        );
     in
     {
-      packages = forAllSystems (pkgs:
+      packages = forAllSystems (
+        pkgs:
         let
           rust = pkgs.rust-bin.stable.latest.default;
           rustPlatform = pkgs.makeRustPlatform {
@@ -41,18 +58,26 @@
               mainProgram = "aoc";
             };
           };
-        });
+        }
+      );
 
-      devShells = forAllSystems (pkgs:
+      devShells = forAllSystems (
+        pkgs:
         let
           rust = pkgs.rust-bin.stable.latest.default.override {
-            extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
+            extensions = [
+              "rust-src"
+              "rust-analyzer"
+              "clippy"
+              "rustfmt"
+            ];
           };
         in
         {
           default = pkgs.mkShell {
             packages = [
               rust
+              pkgs.just
               pkgs.cargo-watch
               pkgs.cargo-dist
               pkgs.cargo-edit
@@ -61,7 +86,8 @@
 
             RUST_BACKTRACE = 1;
           };
-        });
+        }
+      );
 
       formatter = forAllSystems (pkgs: pkgs.nixpkgs-fmt);
     };
