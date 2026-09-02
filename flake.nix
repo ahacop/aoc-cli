@@ -1,6 +1,13 @@
 {
   description = "Advent of Code CLI";
 
+  nixConfig = {
+    extra-substituters = [ "https://ahacop.cachix.org" ];
+    extra-trusted-public-keys = [
+      "ahacop.cachix.org-1:DNW02GubEpEM6HsOgAwIPDj81nPOuGxmCp4dvKzJOq0="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay = {

@@ -18,6 +18,15 @@ For one-off use:
 nix run github:ahacop/aoc-cli -- puzzle 2023 1
 ```
 
+Prebuilt binaries for Linux (x86_64, aarch64) and Apple Silicon are on [Cachix](https://ahacop.cachix.org).
+
+```nix
+nix.settings = {
+  extra-substituters = [ "https://ahacop.cachix.org" ];
+  extra-trusted-public-keys = [ "ahacop.cachix.org-1:DNW02GubEpEM6HsOgAwIPDj81nPOuGxmCp4dvKzJOq0=" ];
+};
+```
+
 To pull it into a NixOS / home-manager config that's itself a flake, add it as an input:
 
 ```nix
