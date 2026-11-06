@@ -139,6 +139,8 @@ dependencies = [
  "html2text",
  "reqwest",
  "rookie",
+ "rusqlite",
+ "tempfile",
  "webbrowser",
 ]
 

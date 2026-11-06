@@ -74,7 +74,7 @@ aoc stars  2023           # show stars earned per day, plus the total
 aoc open   2023 1         # open the puzzle page in your browser
 ```
 
-`aoc login` with no argument first tries to read the `session` cookie out of local browsers (Firefox, LibreWolf, Zen, plus whatever `rookie` supports). If that fails it opens the AoC login page so you can paste a token from `document.cookie`.
+`aoc login` with no argument first tries to read the `session` cookie out of local browsers (Firefox, LibreWolf, Zen, plus whatever `rookie` supports). It works while the browser is open, and it tests each cookie against AoC, so it only saves one that is logged in. If none is, it opens the AoC login page so you can paste the `session` cookie's value from your browser's dev tools.
 
 Inputs are cached under your platform cache dir (`~/.cache/aoc-cli/inputs/<year>/<day>.txt` on Linux). Per AoC's automation guidelines they're stable per user, so the file is kept indefinitely — pass `--refresh`, or just delete it, to re-fetch.
 

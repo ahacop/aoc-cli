@@ -1,9 +1,10 @@
 use crate::client;
 use anyhow::{Context, Result, bail, ensure};
-use std::cmp;
+use rusqlite::Connection;
 use std::collections::HashSet;
 use std::io::{self, BufRead, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::{cmp, fs};
 
 const LOGIN_URL: &str = "https://adventofcode.com/auth/login";
 
@@ -57,16 +58,23 @@ fn is_hex(token: &str) -> bool {
 fn browser_tokens() -> Vec<String> {
     let domains = Some(vec!["adventofcode.com".to_string()]);
     let mut cookies = rookie::load(domains.clone()).unwrap_or_default();
-    for db in extra_firefox_dbs() {
-        if let Ok(extra) = rookie::firefox_based(db, domains.clone()) {
-            cookies.extend(extra);
+    let mut found: Vec<(u64, String)> = Vec::new();
+    for db in firefox_dbs() {
+        match read_firefox_copy(&db) {
+            Ok(rows) => found.extend(rows),
+            Err(_) => {
+                if let Ok(extra) = rookie::firefox_based(db, domains.clone()) {
+                    cookies.extend(extra);
+                }
+            }
         }
     }
-    let mut found: Vec<(u64, String)> = cookies
-        .into_iter()
-        .filter(|c| c.name == "session")
-        .map(|c| (c.expires.unwrap_or(0), c.value))
-        .collect();
+    found.extend(
+        cookies
+            .into_iter()
+            .filter(|c| c.name == "session")
+            .map(|c| (c.expires.unwrap_or(0), c.value)),
+    );
     found.retain(|(_, value)| !value.is_empty() && is_hex(value));
     found.sort_by_key(|(expires, _)| cmp::Reverse(*expires));
     let mut seen = HashSet::new();
@@ -77,21 +85,60 @@ fn browser_tokens() -> Vec<String> {
         .collect()
 }
 
-/// Firefox cookie DBs in non-standard locations rookie's default config misses
-/// (notably the XDG layout `~/.config/mozilla/firefox/<profile>/` used by
-/// NixOS and Home Manager Firefox setups).
-fn extra_firefox_dbs() -> Vec<PathBuf> {
+/// Reads the AoC session cookies from a Firefox cookie DB as `(expiry, value)`
+/// pairs, including cookies that exist only in the DB's write-ahead log.
+///
+/// A running Firefox locks `cookies.sqlite` and keeps recent writes in
+/// `cookies.sqlite-wal`. `rookie` gets past the lock with SQLite's `immutable`
+/// flag, which also ignores that log, so it can miss a recent login. Opening a
+/// private copy of both files needs no such flag, and SQLite applies the log.
+///
+/// The two files are not copied in one step, so a write between the copies can
+/// produce a stale cookie. `obtain_login` tests each cookie against AoC, which
+/// rejects a stale one.
+fn read_firefox_copy(db: &Path) -> Result<Vec<(u64, String)>> {
+    let dir = tempfile::tempdir().context("creating a temporary directory")?;
+    let copy = dir.path().join("cookies.sqlite");
+    fs::copy(db, &copy).with_context(|| format!("copying {}", db.display()))?;
+
+    let mut wal = db.as_os_str().to_owned();
+    wal.push("-wal");
+    match fs::copy(&wal, dir.path().join("cookies.sqlite-wal")) {
+        Ok(_) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e).context("copying the write-ahead log"),
+    }
+
+    let conn = Connection::open(&copy).context("opening the copied cookie DB")?;
+    let mut stmt = conn.prepare(
+        "SELECT expiry, value FROM moz_cookies
+         WHERE host LIKE '%adventofcode.com' AND name = 'session'",
+    )?;
+    let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    rows.collect::<rusqlite::Result<_>>()
+        .context("reading the copied cookie DB")
+}
+
+/// Firefox-family cookie DBs in every profile under the known locations. This
+/// covers the XDG layout `~/.config/mozilla/firefox/<profile>/` used by NixOS
+/// and Home Manager Firefox setups, which `rookie`'s default config misses.
+fn firefox_dbs() -> Vec<PathBuf> {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
         return Vec::new();
     };
     let bases = [
-        home.join(".config/mozilla/firefox"),
-        home.join(".config/librewolf"),
-        home.join(".config/zen"),
+        ".config/mozilla/firefox",
+        ".config/librewolf",
+        ".config/zen",
+        ".mozilla/firefox",
+        ".librewolf",
+        ".zen",
+        "snap/firefox/common/.mozilla/firefox",
+        "Library/Application Support/Firefox/Profiles",
     ];
     let mut out = Vec::new();
     for base in bases {
-        let Ok(entries) = std::fs::read_dir(&base) else {
+        let Ok(entries) = fs::read_dir(home.join(base)) else {
             continue;
         };
         for entry in entries.flatten() {
@@ -141,4 +188,63 @@ fn prompt_paste() -> Result<String> {
             .context("reading token from stdin")?;
     }
     Ok(buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Builds a cookie DB in the state a running Firefox leaves it: exclusively
+    /// locked, with its rows only in the write-ahead log. The connection must
+    /// stay open, because closing it moves the rows into the main file.
+    fn locked_db_with_wal(path: &Path) -> Connection {
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(
+            "PRAGMA locking_mode = EXCLUSIVE;
+             PRAGMA journal_mode = WAL;
+             PRAGMA wal_autocheckpoint = 0;
+             CREATE TABLE moz_cookies (host TEXT, name TEXT, value TEXT, expiry INTEGER);
+             INSERT INTO moz_cookies VALUES
+               ('.adventofcode.com', 'session', 'abc123', 1800000000),
+               ('.adventofcode.com', 'other', 'nope', 1800000000),
+               ('.example.com', 'session', 'nope', 1800000000);",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn read_firefox_copy_sees_rows_only_in_the_wal() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("cookies.sqlite");
+        let _firefox = locked_db_with_wal(&db);
+
+        let wal = dir.path().join("cookies.sqlite-wal");
+        assert!(fs::metadata(&wal).unwrap().len() > 0);
+
+        let rows = read_firefox_copy(&db).unwrap();
+        assert_eq!(rows, vec![(1800000000, "abc123".to_string())]);
+    }
+
+    #[test]
+    fn read_firefox_copy_works_without_a_wal() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("cookies.sqlite");
+        let conn = Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE moz_cookies (host TEXT, name TEXT, value TEXT, expiry INTEGER);
+             INSERT INTO moz_cookies VALUES ('adventofcode.com', 'session', 'abc123', 5);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let rows = read_firefox_copy(&db).unwrap();
+        assert_eq!(rows, vec![(5, "abc123".to_string())]);
+    }
+
+    #[test]
+    fn read_firefox_copy_fails_on_a_missing_db() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(read_firefox_copy(&dir.path().join("cookies.sqlite")).is_err());
+    }
 }
