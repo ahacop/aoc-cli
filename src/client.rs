@@ -84,6 +84,27 @@ pub fn fetch_calendar(year: u32, token: &str) -> Result<String> {
     get_page(&format!("https://adventofcode.com/{year}"), token)
 }
 
+/// Account name that AoC associates with `token`, or `None` if AoC doesn't
+/// accept the token. Any calendar page works for this check. 2015 is the first
+/// year, so its page always exists.
+///
+/// AoC rejects a token in two ways: a logged-out page for an expired token, and
+/// HTTP 500 for an unknown one. Both give `None`, so one junk browser cookie
+/// can't stop `aoc login` from trying the next. An AoC outage also gives `None`.
+/// Network failures stay errors.
+pub fn current_user(token: &str) -> Result<Option<String>> {
+    let url = "https://adventofcode.com/2015";
+    let resp = client(token)?
+        .get(url)
+        .send()
+        .with_context(|| format!("GET {url}"))?;
+    if resp.status() == StatusCode::INTERNAL_SERVER_ERROR {
+        return Ok(None);
+    }
+    let html = handle(resp, url)?;
+    Ok(logged_in_user(&html).map(str::to_string))
+}
+
 /// Account name in the page header, or `None` on a page served to a logged-out
 /// visitor. AoC answers 200 for an expired session cookie, so the header is the
 /// only sign of one.

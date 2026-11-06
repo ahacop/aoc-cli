@@ -1,19 +1,60 @@
-use anyhow::{Context, Result};
+use crate::client;
+use anyhow::{Context, Result, bail, ensure};
+use std::cmp;
+use std::collections::HashSet;
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::PathBuf;
 
 const LOGIN_URL: &str = "https://adventofcode.com/auth/login";
 
-pub fn obtain_token() -> Result<String> {
-    if let Some(token) = try_browsers() {
-        eprintln!("Found AoC session cookie in your browser.");
-        return Ok(token);
-    }
-    eprintln!("Couldn't read an AoC session cookie from any local browser.");
-    prompt_paste()
+/// A session token that AoC accepts, and the account it belongs to.
+pub struct Login {
+    pub token: String,
+    pub user: String,
 }
 
-fn try_browsers() -> Option<String> {
+/// Finds a working session token: the first browser cookie that AoC accepts,
+/// or else one that the user pastes.
+pub fn obtain_login() -> Result<Login> {
+    let tokens = browser_tokens();
+    for token in &tokens {
+        if let Some(user) = client::current_user(token)? {
+            eprintln!("Found a logged-in AoC session cookie in your browser.");
+            return Ok(Login {
+                token: token.clone(),
+                user,
+            });
+        }
+    }
+    if tokens.is_empty() {
+        eprintln!("Couldn't read an AoC session cookie from any local browser.");
+    } else {
+        eprintln!("Found AoC session cookies in your browser, but none of them is logged in.");
+    }
+    check_token(&prompt_paste()?)
+}
+
+/// Checks the format of `raw`, then asks AoC whether it is logged in.
+pub fn check_token(raw: &str) -> Result<Login> {
+    let token = raw.trim();
+    ensure!(!token.is_empty(), "empty session token");
+    ensure!(is_hex(token), "session cookie should be a hex string");
+    match client::current_user(token)? {
+        Some(user) => Ok(Login {
+            token: token.to_string(),
+            user,
+        }),
+        None => bail!("AoC doesn't accept this session cookie — it is invalid or expired"),
+    }
+}
+
+fn is_hex(token: &str) -> bool {
+    token.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Every distinct AoC session cookie in the local browsers, latest expiry first
+/// so that the most recently refreshed login is tried first.
+fn browser_tokens() -> Vec<String> {
     let domains = Some(vec!["adventofcode.com".to_string()]);
     let mut cookies = rookie::load(domains.clone()).unwrap_or_default();
     for db in extra_firefox_dbs() {
@@ -21,10 +62,19 @@ fn try_browsers() -> Option<String> {
             cookies.extend(extra);
         }
     }
-    cookies.retain(|c| c.name == "session" && !c.value.is_empty());
-    // Prefer the cookie with the latest expiry — most recently refreshed login.
-    cookies.sort_by_key(|c| std::cmp::Reverse(c.expires.unwrap_or(0)));
-    cookies.into_iter().next().map(|c| c.value)
+    let mut found: Vec<(u64, String)> = cookies
+        .into_iter()
+        .filter(|c| c.name == "session")
+        .map(|c| (c.expires.unwrap_or(0), c.value))
+        .collect();
+    found.retain(|(_, value)| !value.is_empty() && is_hex(value));
+    found.sort_by_key(|(expires, _)| cmp::Reverse(*expires));
+    let mut seen = HashSet::new();
+    found
+        .into_iter()
+        .map(|(_, value)| value)
+        .filter(|value| seen.insert(value.clone()))
+        .collect()
 }
 
 /// Firefox cookie DBs in non-standard locations rookie's default config misses
@@ -71,7 +121,7 @@ fn prompt_paste() -> Result<String> {
     eprintln!("  Safari:            Develop → Show Web Inspector → Storage");
     eprintln!("                     → Cookies → adventofcode.com → session");
     eprintln!();
-    eprintln!("The value is a ~96-char hex string. Treat it like a password.");
+    eprintln!("The value is a 128-char hex string. Treat it like a password.");
     eprintln!();
 
     let mut buf = String::new();

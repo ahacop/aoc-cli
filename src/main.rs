@@ -20,7 +20,8 @@ enum Command {
     ///
     /// With no TOKEN, tries to read the `session` cookie from a local browser
     /// (Chrome, Firefox, Safari, Edge, Brave). If that fails, opens the AoC
-    /// login page and prompts you to paste it.
+    /// login page and prompts you to paste it. A cookie is only saved after
+    /// AoC confirms that it is logged in.
     Login { token: Option<String> },
     /// Print the path of the saved session file.
     Where,
@@ -189,17 +190,12 @@ fn validate(year: u32, day: u32) -> Result<()> {
 }
 
 fn login(token: Option<String>) -> Result<()> {
-    let raw = match token {
-        Some(t) => t,
-        None => auth::obtain_token()?,
+    let login = match token {
+        Some(t) => auth::check_token(&t)?,
+        None => auth::obtain_login()?,
     };
-    let token = raw.trim();
-    ensure!(!token.is_empty(), "empty session token");
-    ensure!(
-        token.chars().all(|c| c.is_ascii_hexdigit()),
-        "session cookie should be a hex string"
-    );
-    let path = session::save(token)?;
+    let path = session::save(&login.token)?;
+    eprintln!("Logged in as {}", login.user);
     eprintln!("Saved session to {}", path.display());
     Ok(())
 }
