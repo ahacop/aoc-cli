@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use reqwest::blocking::Client;
 use reqwest::{StatusCode, header, redirect};
 use std::time::Duration;
@@ -8,6 +8,8 @@ const USER_AGENT: &str = concat!(
     env!("CARGO_PKG_VERSION"),
     " (+https://github.com/ahacop/aoc-cli)"
 );
+
+const NOT_LOGGED_IN: &str = "not logged in — session cookie is invalid or expired, run `aoc login`";
 
 fn client(token: &str) -> Result<Client> {
     let cookie = format!("session={token}");
@@ -32,8 +34,18 @@ fn handle(resp: reqwest::blocking::Response, url: &str) -> Result<String> {
             bail!("authentication failed — session cookie missing, invalid, or expired")
         }
         StatusCode::NOT_FOUND => bail!("not found: {url} (is the puzzle out yet?)"),
+        StatusCode::INTERNAL_SERVER_ERROR => {
+            bail!(
+                "AoC returned HTTP 500 for {url} — it does this for an unknown session cookie, so try `aoc login`"
+            )
+        }
         s => {
             let body = resp.text().unwrap_or_default();
+            // AoC refuses a logged-out input request with 400 and a "log in" message.
+            ensure!(
+                !(s == StatusCode::BAD_REQUEST && body.contains("log in")),
+                NOT_LOGGED_IN
+            );
             bail!("HTTP {s} for {url}\n{}", body.trim())
         }
     }
@@ -47,8 +59,18 @@ fn get(url: &str, token: &str) -> Result<String> {
     handle(resp, url)
 }
 
+/// Fetches an HTML page, and fails if AoC served it to a logged-out visitor.
+/// AoC serves those pages with a 200 but leaves out everything tied to the
+/// account: a calendar has no stars and a puzzle has no part 2 or recorded
+/// answers. Without this check a dead session cookie reads as no progress.
+fn get_page(url: &str, token: &str) -> Result<String> {
+    let html = get(url, token)?;
+    ensure!(logged_in_user(&html).is_some(), NOT_LOGGED_IN);
+    Ok(html)
+}
+
 pub fn fetch_puzzle(year: u32, day: u32, token: &str) -> Result<String> {
-    get(&format!("https://adventofcode.com/{year}/day/{day}"), token)
+    get_page(&format!("https://adventofcode.com/{year}/day/{day}"), token)
 }
 
 pub fn fetch_input(year: u32, day: u32, token: &str) -> Result<String> {
@@ -59,7 +81,18 @@ pub fn fetch_input(year: u32, day: u32, token: &str) -> Result<String> {
 }
 
 pub fn fetch_calendar(year: u32, token: &str) -> Result<String> {
-    get(&format!("https://adventofcode.com/{year}"), token)
+    get_page(&format!("https://adventofcode.com/{year}"), token)
+}
+
+/// Account name in the page header, or `None` on a page served to a logged-out
+/// visitor. AoC answers 200 for an expired session cookie, so the header is the
+/// only sign of one.
+fn logged_in_user(html: &str) -> Option<&str> {
+    let open = "<div class=\"user\">";
+    let start = html.find(open)? + open.len();
+    let rest = &html[start..];
+    let name = rest[..rest.find('<')?].trim();
+    (!name.is_empty()).then_some(name)
 }
 
 /// Lowest day on the calendar page that still needs work, paired with the next
@@ -192,6 +225,30 @@ fn extract_first_article(html: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logged_in_user_reads_name_before_star_count() {
+        let html = r#"<div class="user">ahacop <span class="star-count">28*</span></div>"#;
+        assert_eq!(logged_in_user(html), Some("ahacop"));
+    }
+
+    #[test]
+    fn logged_in_user_reads_name_before_supporter_badge() {
+        let html = r#"<div class="user">ahacop <a href="/support">(AoC++)</a></div>"#;
+        assert_eq!(logged_in_user(html), Some("ahacop"));
+    }
+
+    #[test]
+    fn logged_in_user_reads_anonymous_name() {
+        let html = r#"<div class="user">(anonymous user #123)</div>"#;
+        assert_eq!(logged_in_user(html), Some("(anonymous user #123)"));
+    }
+
+    #[test]
+    fn logged_in_user_none_on_logged_out_page() {
+        let html = r#"<ul><li><a href="/2016/auth/login">[Log In]</a></li></ul>"#;
+        assert_eq!(logged_in_user(html), None);
+    }
 
     #[test]
     fn extracts_multiple_articles() {
