@@ -20,3 +20,7 @@ install-updater = false
 # Publish the generated Homebrew formula to ahacop's tap
 tap = "ahacop/homebrew-tap"
 publish-jobs = ["homebrew"]
+
+# Runners for each target. The default for aarch64-apple-darwin is macos-14, which GitHub does not support.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-15"
